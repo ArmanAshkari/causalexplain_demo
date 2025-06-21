@@ -1,0 +1,1 @@
+SCRATCH_DIR = '/uufs/chpc.utah.edu/common/home/rezig-group2/Arman/research/causalexplain_demo'
