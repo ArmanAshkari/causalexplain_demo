@@ -77,16 +77,16 @@ def load_training_data():
     
     if selected_dataset == "Adult Income":
         adult, _, target, train_set_indices, _ = load_adult()
-        with open('data/adult/le_dict.pkl', 'rb') as f:
-            le_dict = pickle.load(f)
+        # with open('data/adult/le_dict.pkl', 'rb') as f:
+        #     le_dict = pickle.load(f)
     
         train_set = adult.loc[train_set_indices]
-        for col in train_set.columns:
-            train_set[col] = le_dict[col].inverse_transform(train_set[col])
+        # for col in train_set.columns:
+        #     train_set[col] = le_dict[col].inverse_transform(train_set[col])
             
         st.session_state["training_data"] = train_set
         st.session_state["target"] = target
-        st.session_state["le_dict"] = le_dict
+        # st.session_state["le_dict"] = le_dict
             
     elif selected_dataset == "Stackoverflow Annual Developer Survey":
         so, _, target, train_set_indices, _ = load_so()
