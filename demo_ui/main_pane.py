@@ -121,12 +121,12 @@ def load_test_data():
 
     if selected_dataset == "Adult Income":
         adult, _, target, _, test_indices_no_duplicate = load_adult()
-        with open('data/adult/le_dict.pkl', 'rb') as f:
-            le_dict = pickle.load(f)
+        # with open('data/adult/le_dict.pkl', 'rb') as f:
+        #     le_dict = pickle.load(f)
 
         test_set = adult.loc[test_indices_no_duplicate]
-        for col in test_set.columns:
-            test_set[col] = le_dict[col].inverse_transform(test_set[col])
+        # for col in test_set.columns:
+        #     test_set[col] = le_dict[col].inverse_transform(test_set[col])
         
         st.session_state["_test_data"] = test_set
         st.session_state["test_data"] = test_set.drop(columns=[target], axis=1)
