@@ -10,7 +10,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 
-from .util import build_rules_for_train_set_cg, sort_rules_cg, hierarchical_read_to_shared_dict, filter_by_support, get_base_model
+from .util import build_rules_for_train_set_cg, sort_rules_cg, hierarchical_read_to_shared_dict, filter_by_support, get_base_model, compute_ATE
 
 np.random.seed(42)
 
@@ -143,7 +143,7 @@ if __name__ == '__main__':
     """
     time python -m src.proc_data.proc_compas
     """
-    preprocess_compas()
+    # preprocess_compas()
 
     # remove_duplicates(num_processor=192, num_batches=5, dataset_name='compas', df=pd.read_csv(f'data/compas/compas.csv'), target='is_recid')
 
@@ -199,7 +199,12 @@ if __name__ == '__main__':
 
     # print(f'len(filtered_rules_dict): {len(filtered_rules_dict)}')
 
-    model_name = 'nn'
-    getClassifier, clf, base_y_pred = get_base_model(dataset_name='compas', model_name=model_name)
-    with open(f'data/compas/{model_name}_base_pred.pkl', 'wb') as f:
-        pickle.dump(base_y_pred, f)
+    # model_name = 'nn'
+    # getClassifier, clf, base_y_pred = get_base_model(dataset_name='compas', model_name=model_name)
+    # with open(f'data/compas/{model_name}_base_pred.pkl', 'wb') as f:
+    #     pickle.dump(base_y_pred, f)
+
+    min_freq, max_support = 1000, 0.3
+    filtered_rules_dict = compute_ATE(dataset_name='compas', train_set=train_set, target=target, freq_threshold=min_freq, support_threshold=max_support)
+    with open(f'data/compas/rules_freq_{min_freq}_supp_{max_support}_w_ATE.pkl', 'wb') as f:
+        pickle.dump(filtered_rules_dict, f)

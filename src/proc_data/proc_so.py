@@ -14,7 +14,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 
-from .util import build_rules_for_train_set_cg, sort_rules_cg, read_to_shared_dict, hierarchical_read_to_shared_dict, rule_to_predicate_cg, filter_by_support
+from .util import build_rules_for_train_set_cg, sort_rules_cg, read_to_shared_dict, hierarchical_read_to_shared_dict, rule_to_predicate_cg, filter_by_support, compute_ATE
 
 
 np.random.seed(42)
@@ -237,10 +237,10 @@ if __name__ == '__main__':
     # preprocess_so()
     # remove_duplicates(num_processor=56, num_batches=5, dataset_name='so', df=pd.read_csv('data/so/so_enc_final.csv'), target='ConvertedSalary')
 
-    # so, so_1hot, target, train_set_indices, test_indices_no_duplicate = load_so()
+    so, so_1hot, target, train_set_indices, test_indices_no_duplicate = load_so()
 
-    # train_set, test_set = so.loc[train_set_indices], so.loc[test_indices_no_duplicate]
-    # train_set_1hot, test_set_1hot = so_1hot.loc[train_set_indices], so_1hot.loc[test_indices_no_duplicate]
+    train_set, test_set = so.loc[train_set_indices], so.loc[test_indices_no_duplicate]
+    train_set_1hot, test_set_1hot = so_1hot.loc[train_set_indices], so_1hot.loc[test_indices_no_duplicate]
 
     # print(len(test_indices_no_duplicate))
     # valid_indices, eval_indices = get_valid_eval_indices(1)
@@ -274,9 +274,9 @@ if __name__ == '__main__':
 
     # hierarchical_read_to_shared_dict(dataset_name='so', train_set=train_set)
     
-    with open(f'data/so/global_dict.pkl', 'rb') as f:
-        global_dict = pickle.load(f)
-    print(f'len(global_dict): {len(global_dict)}')
+    # with open(f'data/so/global_dict.pkl', 'rb') as f:
+    #     global_dict = pickle.load(f)
+    # print(f'len(global_dict): {len(global_dict)}')
 
     # temp = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000, 1050, 1100, 1150, 1200, 1250, 1300, 1350, 1400, 1450, 1500, 1550, 1600, 1650, 1700, 1750, 1800, 1850, 1900, 1950, 2000]
     # dict = defaultdict(int)
@@ -286,14 +286,14 @@ if __name__ == '__main__':
     #             dict[x] += 1
     # print(dict)
 
-    dict = {}
-    min_freq = 1000
-    for i, key in enumerate(global_dict.keys()):
-        if len(global_dict[key]) > min_freq:
-            dict[i] = key
+    # dict = {}
+    # min_freq = 1000
+    # for i, key in enumerate(global_dict.keys()):
+    #     if len(global_dict[key]) > min_freq:
+    #         dict[i] = key
     
-    with open(f'data/so/rules_freq_{min_freq}.pkl', 'wb') as f:
-        pickle.dump(dict, f)
+    # with open(f'data/so/rules_freq_{min_freq}.pkl', 'wb') as f:
+    #     pickle.dump(dict, f)
 
     # filtered_rules_dict = filter_by_support(dataset_name='so', train_set=train_set, target=target, freq_threshold=min_freq, support_threshold=0.3)
     # with open(f'data/so/rules_freq_{min_freq}_supp_0.3.pkl', 'wb') as f:
@@ -314,7 +314,13 @@ if __name__ == '__main__':
     #         temp2 = train_set_1hot.query(f'not({predicate})')
     #         print(f'len(temp): {len(temp)}, len(temp2): {len(temp2)} | len(train_set): {len(train_set_1hot)}')
 
-    model_name = 'nn'
-    getClassifier, clf, base_y_pred = get_base_model(dataset_name='so', model_name=model_name)
-    with open(f'data/so/{model_name}_base_pred.pkl', 'wb') as f:
-        pickle.dump(base_y_pred, f)
+    # model_name = 'nn'
+    # getClassifier, clf, base_y_pred = get_base_model(dataset_name='so', model_name=model_name)
+    # with open(f'data/so/{model_name}_base_pred.pkl', 'wb') as f:
+    #     pickle.dump(base_y_pred, f)
+
+
+    min_freq, max_support = 1000, 0.3
+    filtered_rules_dict = compute_ATE(dataset_name='so', train_set=train_set, target=target, freq_threshold=min_freq, support_threshold=max_support)
+    with open(f'data/so/rules_freq_{min_freq}_supp_{max_support}_w_ATE.pkl', 'wb') as f:
+        pickle.dump(filtered_rules_dict, f)
