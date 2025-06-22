@@ -35,3 +35,23 @@ cell_style_jscode2 = JsCode("""
         return {'border': '1px solid lightgreen'};
     }   
 """)
+
+def make_cell_style_jscode(target):
+    return JsCode(f"""
+        function(params) {{
+            if (params.data && params.data["{target} (Prediction)"] !== params.data["{target} (True Value)"]) {{
+                return {{ backgroundColor: "pink", 'border': '3px solid pink'}};
+            }}
+            return {{'border': '3px solid pink'}};
+        }}   
+    """)    
+
+def make_cell_style_jscode2(target):
+    return JsCode(f"""
+        function(params) {{
+            if (params.data && params.data["{target} (Prediction)"] !== params.data["{target} (True Value)"]) {{
+                return {{ backgroundColor: "lightgreen", 'border': '3px solid lightgreen'}};
+            }}
+            return {{'border': '3px solid lightgreen'}};
+        }}   
+    """)

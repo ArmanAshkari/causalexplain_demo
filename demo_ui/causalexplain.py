@@ -14,7 +14,7 @@ def main():
 
     datasets = ["Adult Income", "Stackoverflow Annual Developer Survey", "Compas"]
 
-    ml_models = ["SVM", "Logistic Regression", "Neural Network", "XGBoost", "Adaboost", "Random Forest"]
+    ml_models = ["SVM", "Logistic Regression", "Neural Network", "Adaboost", "Random Forest"]
 
     steps = {
         1: "Select Dataset",

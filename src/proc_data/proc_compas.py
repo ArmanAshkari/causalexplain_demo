@@ -18,9 +18,10 @@ np.random.seed(42)
 def preprocess_compas():
     """
     """
-    cols = ['is_recid', 'priors_count', 'juv_other_count', 'juv_misd_count', 'juv_fel_count', 'race', 'age_cat', 'sex','score_text']
+    cols = ['priors_count', 'juv_other_count', 'juv_misd_count', 'juv_fel_count', 'race', 'age_cat', 'sex','score_text', 'is_recid']
 
     compas = pd.read_csv(f'data/compas/compas-scores-two-years.csv', usecols=cols)
+    compas = compas[cols]
 
     compas['age_cat'] = compas['age_cat'].map({'Less than 25': 0, '25 - 45': 1, 'Greater than 45': 2}).astype(int)    
     compas['score_text'] = compas['score_text'].map({'Low': 0, 'Medium': 1, 'High': 2}).astype(int)    

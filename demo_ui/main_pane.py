@@ -1,3 +1,5 @@
+import multiprocessing
+from pathlib import Path
 import streamlit as st
 import io
 import pandas as pd
@@ -14,10 +16,11 @@ import numpy as np
 from src.proc_data.proc_adult import load_adult
 from src.proc_data.proc_so import load_so
 from src.proc_data.proc_compas import load_compas
+from src.proc_data.stats import read_to_shared_dict
 
 from src.proc_data.util import get_base_predictions, rule_to_predicate_cg
 from .dataframe_highlight import apply_highlight
-from .util import custom_css, cell_style_jscode, cell_style_jscode2
+from .util import custom_css, make_cell_style_jscode, make_cell_style_jscode2
 
 np.random.seed(42)
 
@@ -86,10 +89,30 @@ def load_training_data():
         st.session_state["le_dict"] = le_dict
             
     elif selected_dataset == "Stackoverflow Annual Developer Survey":
-        pass
+        so, _, target, train_set_indices, _ = load_so()
+        # with open('data/so/le_dict.pkl', 'rb') as f:
+        #     le_dict = pickle.load(f)
+
+        train_set = so.loc[train_set_indices]
+        # for col in train_set.columns:
+        #     train_set[col] = le_dict[col].inverse_transform(train_set[col])
+        
+        st.session_state["training_data"] = train_set
+        st.session_state["target"] = target
+        # st.session_state["le_dict"] = le_dict
         
     elif selected_dataset == "Compas":
-        pass
+        compas, _, target, train_set_indices, _ = load_compas()
+        # with open('data/compas/le_dict.pkl', 'rb') as f:
+        #     le_dict = pickle.load(f)
+
+        train_set = compas.loc[train_set_indices]
+        # for col in train_set.columns:
+        #     train_set[col] = le_dict[col].inverse_transform(train_set[col])
+        
+        st.session_state["training_data"] = train_set
+        st.session_state["target"] = target
+        # st.session_state["le_dict"] = le_dict
 
 def load_test_data():
     """
@@ -110,10 +133,30 @@ def load_test_data():
         st.session_state["test_indices"] = test_indices_no_duplicate
             
     elif selected_dataset == "Stackoverflow Annual Developer Survey":
-        pass
+        so, _, target, _, test_indices_no_duplicate = load_so()
+        # with open('data/so/le_dict.pkl', 'rb') as f:
+        #     le_dict = pickle.load(f)
+
+        test_set = so.loc[test_indices_no_duplicate]
+        # for col in test_set.columns:
+        #     test_set[col] = le_dict[col].inverse_transform(test_set[col])
+        
+        st.session_state["_test_data"] = test_set
+        st.session_state["test_data"] = test_set.drop(columns=[target], axis=1)
+        st.session_state["test_indices"] = test_indices_no_duplicate
         
     elif selected_dataset == "Compas":
-        pass
+        compas, _, target, _, test_indices_no_duplicate = load_compas()
+        # with open('data/compas/le_dict.pkl', 'rb') as f:
+        #     le_dict = pickle.load(f)
+
+        test_set = compas.loc[test_indices_no_duplicate]
+        # for col in test_set.columns:
+        #     test_set[col] = le_dict[col].inverse_transform(test_set[col])
+        
+        st.session_state["_test_data"] = test_set
+        st.session_state["test_data"] = test_set.drop(columns=[target], axis=1)
+        st.session_state["test_indices"] = test_indices_no_duplicate
 
 
 def run_classification():
@@ -145,7 +188,7 @@ def run_classification():
         _model_name = 'rf'
     
     y_pred = get_base_predictions(dataset_name=_dataset_name, model_name=_model_name)
-    y_pred = st.session_state.le_dict[st.session_state.target].inverse_transform(y_pred)
+    # y_pred = st.session_state.le_dict[st.session_state.target].inverse_transform(y_pred)
 
     classification_df = st.session_state.test_data.copy()
     prediction_col = f"{target} (Prediction)"
@@ -302,7 +345,8 @@ def generate_profiles():
         with open(f'data/so/profiles_dis2.pkl', 'rb') as f:
             _profiles = pickle.load(f)
     elif dataset_name == "Compas":
-        pass
+        with open(f'data/compas/profiles_dis2.pkl', 'rb') as f:
+            _profiles = pickle.load(f)
     
     profiles = [' or '.join(['(' + ' and '.join([f'`{c}`==*' for c in conjunction]) + ')' for conjunction in profile]) for profile in _profiles]
 
@@ -315,23 +359,125 @@ def filter_rules():
     """
     dataset_name = st.session_state.selected_dataset
     if dataset_name == "Adult Income":
-        # rules_dir = f'data/adult/rules_freq_2000_supp_0.3.pkl'
         rules_dir = f'data/adult/rules_freq_2000_supp_0.3_w_ATE.pkl'
     elif dataset_name == "Stackoverflow Annual Developer Survey":
-        rules_dir = f'data/so/rules_freq_1000_supp_0.3.pkl'
+        rules_dir = f'data/so/rules_freq_1000_supp_0.3_w_ATE.pkl'
     elif dataset_name == "Compas":
-        pass
+        rules_dir = f'data/compas/rules_freq_1000_supp_0.3_w_ATE.pkl'
 
     with open(rules_dir, 'rb') as f:
-        temp = pickle.load(f)
+        rules_dict = pickle.load(f)
+
+    st.session_state["rules_dict"] = rules_dict
     
-    _rules = [(rule, support, del_ATE) for rule, support, del_ATE in temp.values()]
-    _rules_temp = [(rule_to_predicate_cg(rule), support, del_ATE) for rule, support, del_ATE in temp.values()]
-    rules = pd.DataFrame(data=_rules_temp, columns=['Rules', 'Support', 'Δ ATE'])
+    _rules = [(rule, support, del_ATE) for rule, support, del_ATE in rules_dict.values()]
+    _rules_temp = [(rule_to_predicate_cg(rule), support, del_ATE) for rule, support, del_ATE in rules_dict.values()]
+    rules = pd.DataFrame(data=_rules_temp, columns=['Rules', 'Support', 'ATE'])
     # rules['Δ ATE'] = np.random.uniform(5, 10, len(rules))
 
     st.session_state["_rules"] = _rules
     st.session_state["rules"] = rules    
+
+
+def process_metadata():
+    """
+    """
+    dataset_name = st.session_state.selected_dataset
+    model_name = st.session_state.selected_model
+
+    if dataset_name == "Adult Income":
+        _dataset_name = 'adult'
+    elif dataset_name == "Stackoverflow Annual Developer Survey":
+        _dataset_name = 'so'
+    elif dataset_name == "Compas":
+        _dataset_name = 'compas'
+    
+    if model_name == "SVM":
+        _model_name = 'linsvc'
+    elif model_name == "Logistic Regression":
+        _model_name = 'logreg'
+    elif model_name == "Neural Network":
+        _model_name = 'nn'
+    elif model_name == "XGBoost":
+        _model_name = 'xgboost'
+    elif model_name == "Adaboost":
+        _model_name = 'adaboost'
+    elif model_name == "Random Forest":
+        _model_name = 'rf'
+
+    with open(f'data/{_dataset_name}/{_model_name}_base_pred.pkl', 'rb') as f:
+        base_y_pred = pickle.load(f)
+
+    flip_history = {i:set() for i in range(len(base_y_pred))}
+    # highest_model_sim = {i:None for i in range(len(base_y_pred))}
+
+    # with open(rules_dir, 'rb') as f:
+    #     rules_dict = pickle.load(f)
+
+    rules_dict = st.session_state.rules_dict
+    
+    rules_list = list(rules_dict.items())
+
+    # filenames = [f'{global_index}_{label}.pkl' for (global_index, label), (rule_w_target, support, del_ATE) in rules_list]
+    filenames = [f'{global_index}_{label}.pkl' for global_index, label in rules_dict.keys()]
+    directory = f'data/{_dataset_name}/saved_models/{_model_name}/metadata'
+
+    temp = list()
+    for filename in filenames:
+        file_path = Path(f'{directory}/{filename}')
+        with open(file_path, 'rb') as f:
+            data = pickle.load(f)  # Read the .pkl file
+        temp.append(data)
+
+    metadata = {}
+    for i, (global_index, label) in enumerate(rules_dict.keys()):
+        metadata[(global_index, label)] = temp[i]
+
+    for (global_index, label), (accuracy, model_similarity, new_y_pred) in metadata.items():
+        flips = (base_y_pred != new_y_pred).astype(int)
+        flips_where = np.where(flips)[0]
+        for j in flips_where:
+            flip_history[j].add((global_index, label))
+    
+    # with multiprocessing.Manager() as manager:
+    #     metadata = manager.dict()
+
+    #     read_to_shared_dict(metadata, directory, filenames, max_workers=8, batch_size=1000)
+    #     print(f'{len(metadata)} files read into shared dictionary')
+
+    #     for (global_index, label), (accuracy, model_similarity, new_y_pred) in metadata.items():
+
+    #         flips = (base_y_pred != new_y_pred).astype(int)
+    #         flips_where = np.where(flips)[0]
+    #         for j in flips_where:
+    #             flip_history[j].add((global_index, label))
+    #             # if highest_model_sim[j] is None or model_similarity > highest_model_sim[j][1]:
+    #             #     highest_model_sim[j] = ((global_index, label), model_similarity)
+
+    st.session_state["flip_history"] = flip_history
+    st.session_state["metadata"] = dict(metadata)
+
+
+def get_exp_set(index):
+    """
+    """
+    flip_history = st.session_state.flip_history
+    rules_dict = st.session_state.rules_dict
+    metadata = st.session_state.metadata
+
+    all_exp_set = []
+
+    for global_index, label in flip_history[index]:
+        rule_w_target, support, del_ATE = rules_dict[(global_index, label)]
+        accuracy, model_similarity, new_y_pred = metadata[(global_index, label)]
+
+        all_exp_set.append((rule_w_target, support, del_ATE, accuracy, model_similarity))
+    
+    # Sort by Δ ATE, then by support, then by model similarity
+    all_exp_set.sort(key=lambda x: (-x[4], -x[1], -x[3]))
+
+    return all_exp_set
+
 
 def go_next():
     """Increment step in session state."""
@@ -397,9 +543,11 @@ def render_main_pane(steps):
                     autoHeaderHeight=True # Auto-adjust header height
                 )
 
-            from .util import custom_css, cell_style_jscode, cell_style_jscode2
+            from .util import custom_css, make_cell_style_jscode, make_cell_style_jscode2
 
-            gb.configure_column("income", headerClass="prediction-header", cellStyle=cell_style_jscode)
+            target = st.session_state.target
+
+            gb.configure_column(target, headerClass="prediction-header", cellStyle=make_cell_style_jscode(target))
             # gb.configure_column("income", headerClass="truevalue-header", cellStyle=cell_style_jscode2)
 
             grid_options = gb.build()
@@ -437,7 +585,7 @@ def render_main_pane(steps):
                     autoHeaderHeight=True # Auto-adjust header height
                 )
 
-            from .util import custom_css, cell_style_jscode, cell_style_jscode2
+            from .util import custom_css, make_cell_style_jscode, make_cell_style_jscode2
 
             # gb.configure_column("income (Prediction)", headerClass="prediction-header", cellStyle=cell_style_jscode)
             # gb.configure_column("income (True Value)", headerClass="truevalue-header", cellStyle=cell_style_jscode2)
@@ -464,7 +612,7 @@ def render_main_pane(steps):
 
         if st.button("🚀 Train Model"):
             with st.spinner(f'Training {st.session_state.selected_model} Model...'):
-                if st.session_state.selected_model == "NN":
+                if st.session_state.selected_model == "Neural Network":
                     time.sleep(10)
                 else:
                     time.sleep(3)
@@ -489,10 +637,12 @@ def render_main_pane(steps):
                         autoHeaderHeight=True # Auto-adjust header height
                     )
 
-                from .util import custom_css, cell_style_jscode, cell_style_jscode2
+                from .util import custom_css, make_cell_style_jscode, make_cell_style_jscode2
 
-                gb.configure_column("income (Prediction)", headerClass="prediction-header", cellStyle=cell_style_jscode)
-                gb.configure_column("income (True Value)", headerClass="truevalue-header", cellStyle=cell_style_jscode2)
+                target = st.session_state.target
+
+                gb.configure_column(f"{target} (Prediction)", headerClass="prediction-header", cellStyle=make_cell_style_jscode(target))
+                gb.configure_column(f"{target} (True Value)", headerClass="truevalue-header", cellStyle=make_cell_style_jscode2(target))
 
                 grid_options = gb.build()
 
@@ -614,7 +764,7 @@ def render_main_pane(steps):
                 # gb.configure_column('Rules', width=100)
                 gb.configure_column('Rules', width=1100, auto_size=True, wrapText=True, autoHeight=True)  # Automatically adjust width
                 gb.configure_column('Support', flex=1, valueFormatter="(value != null) ? value.toFixed(3) : ''" )  # Automatically adjust width
-                gb.configure_column('Δ ATE', flex=1, valueFormatter="(value != null) ? value.toFixed(3) : ''" )  # Automatically adjust width
+                gb.configure_column('ATE', flex=1, valueFormatter="(value != null) ? value.toFixed(3) : ''" )  # Automatically adjust width
                 grid_options = gb.build()
 
                 grid_response = AgGrid(rules,
@@ -650,6 +800,7 @@ def render_main_pane(steps):
         if st.button("✅ Confirm and Proceed"):
             with st.spinner(f'Retraining...'):
                 time.sleep(5)
+            process_metadata()  # Process metadata for the selected dataset and model
             st.success("✅ Retraining finished!")  # Placeholder for future logic
 
     # Main Content for Step 6
@@ -672,11 +823,13 @@ def render_main_pane(steps):
                     autoHeaderHeight=True # Auto-adjust header height
                 )
 
-            from .util import custom_css, cell_style_jscode, cell_style_jscode2
+            from .util import custom_css, make_cell_style_jscode, make_cell_style_jscode2
 
+            target = st.session_state.target
+            # Configure columns with custom styles
 
-            gb.configure_column("income (Prediction)", headerClass="prediction-header", cellStyle=cell_style_jscode)
-            gb.configure_column("income (True Value)", headerClass="truevalue-header", cellStyle=cell_style_jscode2)
+            gb.configure_column(f"{target} (Prediction)", headerClass="prediction-header", cellStyle=make_cell_style_jscode(target))
+            gb.configure_column(f"{target} (True Value)", headerClass="truevalue-header", cellStyle=make_cell_style_jscode2(target))
 
             grid_options = gb.build()
 
@@ -710,59 +863,67 @@ def render_main_pane(steps):
             if selected_rows is not None and len(selected_rows) > 0:
                 
                 test_indices = st.session_state.test_indices
-                profiles = st.session_state._profiles
+                # profiles = st.session_state._profiles
+                rules = st.session_state._rules
 
-                selected_index = test_indices[int(selected_rows.index[0])]
+                # selected_index = test_indices[int(selected_rows.index[0])]
+                selected_index = int(selected_rows['index'].values[0])
+
+                all_exp_set = get_exp_set(selected_index)
+                num_exp_set = st.session_state.num_exp_set
+                
+                if num_exp_set > len(all_exp_set):
+                    _num_exp_set = len(all_exp_set)              
+                else:
+                    _num_exp_set = num_exp_set
+                selected_exp = all_exp_set[-_num_exp_set:]
+
+
                 row = selected_rows.iloc[[0]]
 
-                _profiles = [profiles[1315], profiles[1801], profiles[3040]]
+                # _profiles = [profiles[choice] for choice in choices]
+                # selected_rules = [rules[choice][0] for choice in choices]
+                selected_rules = [exp[0] for exp in selected_exp]
                 
                 st.subheader("Explanation Rules:")
 
                 # explanations = [' or '.join(['(' + ' and '.join([f'`{c}`=="{row.iloc[0][c]}"' for c in conjunction + ')']) for conjunction in profile])for profile in _profiles]
-                explanations = [' or '.join(['(' + ' and '.join([f'`{c}`=="{row.iloc[0][c]}"' for c in conjunction]) + ')' for conjunction in profile]) for profile in _profiles]
+                # explanations = [' or '.join(['(' + ' and '.join([f'`{c}`=="{row.iloc[0][c]}"' for c in conjunction]) + ')' for conjunction in profile]) for profile in _profiles]
+                explanations = [rule_to_predicate_cg(rule) for rule in selected_rules] 
                 
                 for explanation in explanations:
                     if st.button(explanation):
-                        if explanation == explanations[0]:
-                            profile = profiles[1315]
-                            nrows = 572
-                            suport = nrows/len(st.session_state.training_data)
-                            delta_ATE = 6.387
-                            accuracy = 0.815
-                            model_similarity = 0.971
-                            
+                        selected_i = None
+                        for i in range(len(explanations)):
 
-                        elif explanation == explanations[1]:
-                            profile = profiles[1801]
-                            nrows = 941
-                            suport = nrows/len(st.session_state.training_data)
-                            delta_ATE = 5.141
-                            accuracy = 0.809
-                            model_similarity = 0.973
-                            
-                        elif explanation == explanations[2]:
-                            profile = profiles[3040]
-                            nrows = 858
-                            suport = nrows/len(st.session_state.training_data)
-                            delta_ATE = 6.032
-                            accuracy = 0.811
-                            model_similarity = 0.966
+                            if explanation == explanations[i]:
+                                # profile = profiles[choice]
+                                selected_i = i
+                                break
+
+                        selected_rule = selected_rules[selected_i]
+                        delta_ATE = selected_exp[selected_i][2]
+                        accuracy = selected_exp[selected_i][3]
+                        model_similarity = selected_exp[selected_i][4]
+
+                        print(selected_i, selected_rule, delta_ATE, accuracy, model_similarity)
                             
 
                         # row = st.session_state['selected_row']
-                        predicate = ' or '.join([' and '.join([f'`{c}`=="{row.iloc[0][c]}"' for c in conjunction]) for conjunction in profile])
+                        # predicate = ' or '.join([' and '.join([f'`{c}`=="{row.iloc[0][c]}"' for c in conjunction]) for conjunction in profile])
+                        predicate = rule_to_predicate_cg(selected_rule)
 
                         # st.write(f"{explanation}: {predicate}")
 
                         train_df = st.session_state.training_data
                         exp_set = train_df.query(predicate)
-                    
+                        nrows = len(exp_set)
+                        suport = nrows/len(st.session_state.training_data)
                         
                         col1, col2 = st.columns([0.6, 0.4])
 
                         with col1:
-                            st.subheader(f"Explanation Set: {nrows} rows, Support {suport:.3f}, Δ ATE: {delta_ATE:.3f}, Accuracy: {accuracy:.3f}, Model Similarity: {model_similarity:.3f}")
+                            st.subheader(f"Explanation Set: {nrows} rows, Support {suport:.3f}, ATE: {delta_ATE:.3f}, Accuracy: {accuracy:.3f}, Model Similarity: {model_similarity:.3f}")
 
                             st.dataframe(exp_set, height=200)
 
@@ -770,7 +931,7 @@ def render_main_pane(steps):
                             st.subheader("Causal Paths Supported by Explanation")
                             import pygraphviz as pgv
                             import io
-                            A = highlighted_graph(profile)
+                            A = highlighted_graph(profile=profile_from_rule(selected_rule))
                             buf = io.BytesIO()
                             A.draw(buf, format='png', prog='dot')
                             st.image(buf)

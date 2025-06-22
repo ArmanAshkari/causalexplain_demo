@@ -59,7 +59,7 @@ def render_sidebar(steps, datasets, ml_models):
             st.slider(label="Max Support", min_value=0.0, max_value=1.0, step=0.05, key="_support_thrs", on_change=store_value, args=["support_thrs"])
             
             load_value("delta_ATE")
-            st.number_input(label="Min Δ ATE", min_value=0.0, step=0.1, key="_delta_ATE", on_change=store_value, args=["delta_ATE"])
+            st.number_input(label="Min ATE", min_value=0.0, step=0.1, key="_delta_ATE", on_change=store_value, args=["delta_ATE"])
         
         elif st.session_state.step == 5:  # Show read-only parameters in Step 5
             st.write("📜 **Review Model Selection and Parameters**")
@@ -78,7 +78,7 @@ def render_sidebar(steps, datasets, ml_models):
             st.slider("Support", 0.0, 1.0, step=0.05, key="_support_thrs", on_change=store_value, args=["support_thrs"], disabled=True)
             
             load_value("delta_ATE")
-            st.number_input("Δ ATE", min_value=0.0, step=0.1, key="_delta_ATE", on_change=store_value, args=["delta_ATE"], disabled=True)
+            st.number_input("ATE", min_value=0.0, step=0.1, key="_delta_ATE", on_change=store_value, args=["delta_ATE"], disabled=True)
 
         elif st.session_state.step == 6:  # Show read-only parameters in Step 5
             st.write("**Model Selection and Parameters**")
@@ -97,7 +97,7 @@ def render_sidebar(steps, datasets, ml_models):
             st.slider("Support", 0.0, 1.0, step=0.05, key="_support_thrs", on_change=store_value, args=["support_thrs"], disabled=True)
             
             load_value("delta_ATE")
-            st.number_input("Δ ATE", min_value=0.0, step=0.1, key="_delta_ATE", on_change=store_value, args=["delta_ATE"], disabled=True)
+            st.number_input("ATE", min_value=0.0, step=0.1, key="_delta_ATE", on_change=store_value, args=["delta_ATE"], disabled=True)
             
             load_value("num_exp_set")
             st.number_input("Number of explanation sets", min_value=1, step=1, key="_num_exp_set", on_change=store_value, args=["num_exp_set"])
