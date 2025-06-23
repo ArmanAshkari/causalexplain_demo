@@ -320,7 +320,17 @@ if __name__ == '__main__':
     #     pickle.dump(base_y_pred, f)
 
 
-    min_freq, max_support = 1000, 0.3
-    filtered_rules_dict = compute_ATE(dataset_name='so', train_set=train_set, target=target, freq_threshold=min_freq, support_threshold=max_support)
-    with open(f'data/so/rules_freq_{min_freq}_supp_{max_support}_w_ATE.pkl', 'wb') as f:
-        pickle.dump(filtered_rules_dict, f)
+    # min_freq, max_support = 1000, 0.3
+    # filtered_rules_dict = compute_ATE(dataset_name='so', train_set=train_set, target=target, freq_threshold=min_freq, support_threshold=max_support)
+    # with open(f'data/so/rules_freq_{min_freq}_supp_{max_support}_w_ATE.pkl', 'wb') as f:
+    #     pickle.dump(filtered_rules_dict, f)
+
+    with open(f'data/so/multi_val_col_metadata.pkl', 'rb') as f:
+        multi_val_col_metadata = pickle.load(f)
+    
+    print(multi_val_col_metadata)
+
+    with open(f'data/so/le_dict.pkl', 'rb') as f:
+        le_dict = pickle.load(f)
+    
+    print(le_dict)

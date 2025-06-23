@@ -62,6 +62,42 @@ def preprocess_compas():
         pickle.dump(test_set.index.to_list(), f)
 
 
+def inverse_preprocess_compas(df):
+    """
+    Reverts the preprocessing done on the COMPAS dataset.
+    """
+    all_maps = {}
+    # Inverse mappings for categorical columns
+    age_cat_map = {0: 'Less than 25', 1: '25 - 45', 2: 'Greater than 45'}
+    all_maps['age_cat'] = age_cat_map
+    score_text_map = {0: 'Low', 1: 'Medium', 2: 'High'}
+    all_maps['score_text'] = score_text_map
+    race_map = {0: 'Non-Caucasian', 1: 'Caucasian'}  # Original was a group, can't fully restore
+    all_maps['race'] = race_map
+    sex_map = {1: 'Male', 0: 'Female'}
+    all_maps['sex'] = sex_map
+
+    df['age_cat'] = df['age_cat'].map(age_cat_map)
+    df['score_text'] = df['score_text'].map(score_text_map)
+    df['race'] = df['race'].map(race_map)
+    df['sex'] = df['sex'].map(sex_map)
+
+    # Inverse binning for numeric columns (representing ranges or estimates)
+    priors_map = {0: '0-5', 1: '6-15', 2: '16+'}
+    all_maps['priors_count'] = priors_map
+    juv_map = {0: '0', 1: '1', 2: '2+'}
+    all_maps['juv_fel_count'] = juv_map
+    all_maps['juv_misd_count'] = juv_map
+    all_maps['juv_other_count'] = juv_map
+
+    df['priors_count'] = df['priors_count'].map(priors_map)
+    df['juv_fel_count'] = df['juv_fel_count'].map(juv_map)
+    df['juv_misd_count'] = df['juv_misd_count'].map(juv_map)
+    df['juv_other_count'] = df['juv_other_count'].map(juv_map)
+
+    return df, all_maps
+
+
 def load_compas():
     """
     """
@@ -148,11 +184,11 @@ if __name__ == '__main__':
 
     # remove_duplicates(num_processor=192, num_batches=5, dataset_name='compas', df=pd.read_csv(f'data/compas/compas.csv'), target='is_recid')
 
-    compas, compas_1hot, target, train_set_indices, test_set_indices = load_compas()
+    df, compas_1hot, target, train_set_indices, test_set_indices = load_compas()
     # # print(test_set_indices)
     # mlclf_train_indices, mlclf_eval_indices = get_valid_eval_indices(fold=1)
 
-    train_set, test_set = compas.loc[train_set_indices], compas.loc[test_set_indices]
+    train_set, test_set = df.loc[train_set_indices], df.loc[test_set_indices]
     train_set_1hot, test_set_1hot = compas_1hot.loc[train_set_indices], compas_1hot.loc[test_set_indices]
 
     # mlclf_train_set, mlclf_eval_set = test_set.iloc[mlclf_train_indices], test_set.iloc[mlclf_eval_indices]

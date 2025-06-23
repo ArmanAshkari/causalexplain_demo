@@ -1,5 +1,6 @@
 import multiprocessing
 from pathlib import Path
+import re
 import streamlit as st
 import io
 import pandas as pd
@@ -15,51 +16,14 @@ import numpy as np
 
 from src.proc_data.proc_adult import load_adult
 from src.proc_data.proc_so import load_so
-from src.proc_data.proc_compas import load_compas
+from src.proc_data.proc_compas import load_compas, inverse_preprocess_compas
 from src.proc_data.stats import read_to_shared_dict
 
-from src.proc_data.util import get_base_predictions, rule_to_predicate_cg
+from src.proc_data.util import get_base_predictions
 from .dataframe_highlight import apply_highlight
 from .util import custom_css, make_cell_style_jscode, make_cell_style_jscode2
 
 np.random.seed(42)
-
-
-# custom_css = {
-#     ".prediction-header": {
-#         # "background-color": "red !important",
-#         # "color": "white !important",
-#         "font-weight": "bold !important",
-#         "text-align": "center",
-#         'border': '1px solid pink'
-#     },
-#     ".truevalue-header": {
-#         # "background-color": "red !important",
-#         # "color": "white !important",
-#         "font-weight": "bold !important",
-#         "text-align": "center",
-#         'border': '1px solid lightgreen'
-#     }
-
-# }
-
-# cell_style_jscode = JsCode("""
-#     function(params) {
-#         if (params.data && params.data["income (Prediction)"] !== params.data["income (True Value)"]) {
-#             return { backgroundColor: "pink", 'border': '1px solid pink'};
-#         }
-#         return {'border': '1px solid pink'};
-#     }   
-# """)
-
-# cell_style_jscode2 = JsCode("""
-#     function(params) {
-#         if (params.data && params.data["income (Prediction)"] !== params.data["income (True Value)"]) {
-#             return { backgroundColor: "lightgreen", 'border': '2px solid lightgreen'};
-#         }
-#         return {'border': '1px solid lightgreen'};
-#     }   
-# """)
 
 
 def store_value(key):
@@ -70,6 +34,41 @@ def load_value(key):
     st.session_state["_"+key] = st.session_state[key]
 
 
+def rule_to_predicate_cg(rule_w_target, one_hot=False, multi_valued=False):
+    """
+    """
+    regex = rf"([^_]+)_(\d+)" # use this regex to match one-hot encoded features for multi-valued features
+    rule_wo_target = rule_w_target[:-1]  # Exclude the target value
+    target_clause = rule_w_target[-1]  # The target value
+
+    dataset_name = st.session_state.selected_dataset
+    if dataset_name == "Adult Income":
+        le_dict = st.session_state.le_dict
+        target = st.session_state.target      
+        # rule_wo_target_converted = ' or '.join([' and '.join([`{feat}`=={val}' for feat, val in conjunction]) for conjunction in rule_wo_target])
+        rule_wo_target_converted = ' or '.join([' and '.join([f"`{feat}`=='{le_dict[feat].inverse_transform([val])[0]}'" for feat, val in conjunction]) for conjunction in rule_wo_target])
+        
+        return f"({rule_wo_target_converted}) and `{target_clause[0]}`=='{le_dict[target].inverse_transform([target_clause[1]])[0]}'"
+    
+    elif dataset_name == "Stackoverflow Annual Developer Survey":
+        le_dict = st.session_state.le_dict
+        multi_val_col_metadata = st.session_state.multi_val_col_metadata
+        mutli_val_remap = st.session_state.multi_val_remap
+        target = st.session_state.target
+
+        rule_wo_target_converted = ' or '.join([' and '.join([f"`{feat}`=='{le_dict[feat].inverse_transform([val])[0]}'" if feat in le_dict else f'`{mutli_val_remap[feat]}`=={val}' for feat, val in conjunction]) for conjunction in rule_wo_target])
+        
+        return f"({rule_wo_target_converted}) and `{target_clause[0]}`=='{'>=Mdn' if target_clause[1] == 1 else '<Mdn'}'"
+    
+    elif dataset_name == "Compas":
+        target = st.session_state.target
+        all_maps = st.session_state.all_maps
+
+        rule_wo_target_converted = ' or '.join([' and '.join([f"`{feat}`=='{all_maps[feat][val]}'" for feat, val in conjunction]) for conjunction in rule_wo_target])
+        
+        return f"({rule_wo_target_converted}) and `{target_clause[0]}`=='{True if target_clause[1] == 1 else False}'"
+
+
 def load_training_data():
     """
     """
@@ -77,42 +76,55 @@ def load_training_data():
     
     if selected_dataset == "Adult Income":
         adult, _, target, train_set_indices, _ = load_adult()
-        # with open('data/adult/le_dict.pkl', 'rb') as f:
-        #     le_dict = pickle.load(f)
+        with open('data/adult/le_dict.pkl', 'rb') as f:
+            le_dict = pickle.load(f)
     
         train_set = adult.loc[train_set_indices]
-        # for col in train_set.columns:
-        #     train_set[col] = le_dict[col].inverse_transform(train_set[col])
+        for col in train_set.columns:
+            train_set[col] = le_dict[col].inverse_transform(train_set[col])
             
         st.session_state["training_data"] = train_set
         st.session_state["target"] = target
-        # st.session_state["le_dict"] = le_dict
+        st.session_state["le_dict"] = le_dict
             
     elif selected_dataset == "Stackoverflow Annual Developer Survey":
         so, _, target, train_set_indices, _ = load_so()
-        # with open('data/so/le_dict.pkl', 'rb') as f:
-        #     le_dict = pickle.load(f)
+        with open('data/so/le_dict.pkl', 'rb') as f:
+            le_dict = pickle.load(f)
+        with open(f'data/so/multi_val_col_metadata.pkl', 'rb') as f:
+            multi_val_col_metadata = pickle.load(f)
 
         train_set = so.loc[train_set_indices]
-        # for col in train_set.columns:
-        #     train_set[col] = le_dict[col].inverse_transform(train_set[col])
+        for col in le_dict.keys():
+            train_set[col] = le_dict[col].inverse_transform(train_set[col])
+
+        multi_val_remap = {}
+        for col in multi_val_col_metadata:
+            temp_dict = multi_val_col_metadata[col]
+            for key, val in temp_dict.items():
+                train_set.rename(columns={f'{col}_{val}': f'{col}_{key}'}, inplace=True)
+                multi_val_remap[f'{col}_{val}'] = f'{col}_{key}'
+
+        
+        train_set[target] = train_set[target].apply(lambda x: '>=Mdn' if x == 1 else '<Mdn')
         
         st.session_state["training_data"] = train_set
         st.session_state["target"] = target
-        # st.session_state["le_dict"] = le_dict
+        st.session_state["le_dict"] = le_dict
+        st.session_state["multi_val_col_metadata"] = multi_val_col_metadata
+        st.session_state["multi_val_remap"] = multi_val_remap
         
     elif selected_dataset == "Compas":
         compas, _, target, train_set_indices, _ = load_compas()
-        # with open('data/compas/le_dict.pkl', 'rb') as f:
-        #     le_dict = pickle.load(f)
+        compas, all_maps = inverse_preprocess_compas(compas)
+        compas[target] = compas[target].apply(lambda x: 'True' if x == 1 else 'False')
 
         train_set = compas.loc[train_set_indices]
-        # for col in train_set.columns:
-        #     train_set[col] = le_dict[col].inverse_transform(train_set[col])
         
         st.session_state["training_data"] = train_set
         st.session_state["target"] = target
-        # st.session_state["le_dict"] = le_dict
+        st.session_state["all_maps"] = all_maps
+
 
 def load_test_data():
     """
@@ -121,12 +133,12 @@ def load_test_data():
 
     if selected_dataset == "Adult Income":
         adult, _, target, _, test_indices_no_duplicate = load_adult()
-        # with open('data/adult/le_dict.pkl', 'rb') as f:
-        #     le_dict = pickle.load(f)
+        with open('data/adult/le_dict.pkl', 'rb') as f:
+            le_dict = pickle.load(f)
 
         test_set = adult.loc[test_indices_no_duplicate]
-        # for col in test_set.columns:
-        #     test_set[col] = le_dict[col].inverse_transform(test_set[col])
+        for col in test_set.columns:
+            test_set[col] = le_dict[col].inverse_transform(test_set[col])
         
         st.session_state["_test_data"] = test_set
         st.session_state["test_data"] = test_set.drop(columns=[target], axis=1)
@@ -134,12 +146,21 @@ def load_test_data():
             
     elif selected_dataset == "Stackoverflow Annual Developer Survey":
         so, _, target, _, test_indices_no_duplicate = load_so()
-        # with open('data/so/le_dict.pkl', 'rb') as f:
-        #     le_dict = pickle.load(f)
+        with open('data/so/le_dict.pkl', 'rb') as f:
+            le_dict = pickle.load(f)
+        with open(f'data/so/multi_val_col_metadata.pkl', 'rb') as f:
+            multi_val_col_metadata = pickle.load(f)
 
         test_set = so.loc[test_indices_no_duplicate]
-        # for col in test_set.columns:
-        #     test_set[col] = le_dict[col].inverse_transform(test_set[col])
+        for col in le_dict.keys():
+            test_set[col] = le_dict[col].inverse_transform(test_set[col])
+
+        for col in multi_val_col_metadata:
+            temp_dict = multi_val_col_metadata[col]
+            for key, val in temp_dict.items():
+                test_set.rename(columns={f'{col}_{val}': f'{col}_{key}'}, inplace=True)
+
+        test_set[target] = test_set[target].apply(lambda x: '>=Mdn' if x == 1 else '<Mdn')
         
         st.session_state["_test_data"] = test_set
         st.session_state["test_data"] = test_set.drop(columns=[target], axis=1)
@@ -147,12 +168,10 @@ def load_test_data():
         
     elif selected_dataset == "Compas":
         compas, _, target, _, test_indices_no_duplicate = load_compas()
-        # with open('data/compas/le_dict.pkl', 'rb') as f:
-        #     le_dict = pickle.load(f)
+        compas, _ = inverse_preprocess_compas(compas)
+        compas[target] = compas[target].apply(lambda x: 'True' if x == 1 else 'False')
 
         test_set = compas.loc[test_indices_no_duplicate]
-        # for col in test_set.columns:
-        #     test_set[col] = le_dict[col].inverse_transform(test_set[col])
         
         st.session_state["_test_data"] = test_set
         st.session_state["test_data"] = test_set.drop(columns=[target], axis=1)
@@ -193,8 +212,19 @@ def run_classification():
     classification_df = st.session_state.test_data.copy()
     prediction_col = f"{target} (Prediction)"
     true_value_col = f"{target} (True Value)"
-    classification_df[prediction_col] = y_pred
-    classification_df[true_value_col] = y_true.values
+    if dataset_name == 'Adult Income':
+        le_dict = st.session_state.le_dict
+        classification_df[prediction_col] = le_dict[target].inverse_transform(y_pred)
+        classification_df[true_value_col] = y_true.values
+    elif dataset_name == 'Stackoverflow Annual Developer Survey':
+        classification_df[prediction_col] = y_pred
+        classification_df[prediction_col] = classification_df[prediction_col].apply(lambda x: '>=Mdn' if x == 1 else '<Mdn')
+        classification_df[true_value_col] = y_true.values
+    elif dataset_name == 'Compas':
+        classification_df[prediction_col] = y_pred
+        classification_df[prediction_col] = classification_df[prediction_col].apply(lambda x: 'True' if x == 1 else 'False')
+        classification_df[true_value_col] = y_true.values
+
     classification_df.insert(0, "index", range(len(classification_df)))
     # classification_df['index'] =  range(len(classification_df))
     # classification_df.index.name = "Index"
@@ -329,7 +359,13 @@ def profile_from_rule(rule):
     """
     """
     rule_wo_target = rule[:-1]  # Exclude the target value
-    rule_wo_target_converted = tuple([ tuple([feat for feat, _ in conjunction]) for conjunction in rule_wo_target ])
+    dataset_name = st.session_state.selected_dataset
+    if dataset_name == "Stackoverflow Annual Developer Survey":        
+        regex = rf"([^_]+)_(\d+)"
+        rule_wo_target_converted = tuple([tuple([re.match(regex, feat).group(1) if re.match(regex, feat) 
+                                                  else feat for feat, _ in conjunction]) for conjunction in rule_wo_target ])
+    else:
+        rule_wo_target_converted = tuple([tuple([feat for feat, _ in conjunction]) for conjunction in rule_wo_target ])
     return rule_wo_target_converted
 
 
@@ -473,8 +509,7 @@ def get_exp_set(index):
 
         all_exp_set.append((rule_w_target, support, del_ATE, accuracy, model_similarity))
     
-    # Sort by Δ ATE, then by support, then by model similarity
-    all_exp_set.sort(key=lambda x: (-x[4], -x[1], -x[3]))
+    all_exp_set.sort(key=lambda x: (-x[4], x[1], -x[3]))
 
     return all_exp_set
 
@@ -547,7 +582,7 @@ def render_main_pane(steps):
 
             target = st.session_state.target
 
-            gb.configure_column(target, headerClass="prediction-header", cellStyle=make_cell_style_jscode(target))
+            gb.configure_column(target, headerClass="prediction-header", cellStyle=make_cell_style_jscode(target), pinned='right')
             # gb.configure_column("income", headerClass="truevalue-header", cellStyle=cell_style_jscode2)
 
             grid_options = gb.build()
@@ -560,7 +595,7 @@ def render_main_pane(steps):
                 grid_response = AgGrid(
                     data,
                     gridOptions=grid_options,
-                    fit_columns_on_grid_load=True,
+                    fit_columns_on_grid_load=False,
                     height=250,
                     enable_enterprise_modules=False,
                     allow_unsafe_jscode=True,
@@ -600,7 +635,7 @@ def render_main_pane(steps):
                 grid_response = AgGrid(
                     data,
                     gridOptions=grid_options,
-                    fit_columns_on_grid_load=True,
+                    fit_columns_on_grid_load=False,
                     height=250,
                     enable_enterprise_modules=False,
                     allow_unsafe_jscode=True,
@@ -641,8 +676,8 @@ def render_main_pane(steps):
 
                 target = st.session_state.target
 
-                gb.configure_column(f"{target} (Prediction)", headerClass="prediction-header", cellStyle=make_cell_style_jscode(target))
-                gb.configure_column(f"{target} (True Value)", headerClass="truevalue-header", cellStyle=make_cell_style_jscode2(target))
+                gb.configure_column(f"{target} (Prediction)", headerClass="prediction-header", cellStyle=make_cell_style_jscode(target), pinned='right')
+                gb.configure_column(f"{target} (True Value)", headerClass="truevalue-header", cellStyle=make_cell_style_jscode2(target), pinned='right')
 
                 grid_options = gb.build()
 
@@ -654,7 +689,7 @@ def render_main_pane(steps):
                     grid_response = AgGrid(
                         data,
                         gridOptions=grid_options,
-                        fit_columns_on_grid_load=True,
+                        fit_columns_on_grid_load=False,
                         height=250,
                         enable_enterprise_modules=False,
                         allow_unsafe_jscode=True,
@@ -828,8 +863,8 @@ def render_main_pane(steps):
             target = st.session_state.target
             # Configure columns with custom styles
 
-            gb.configure_column(f"{target} (Prediction)", headerClass="prediction-header", cellStyle=make_cell_style_jscode(target))
-            gb.configure_column(f"{target} (True Value)", headerClass="truevalue-header", cellStyle=make_cell_style_jscode2(target))
+            gb.configure_column(f"{target} (Prediction)", headerClass="prediction-header", cellStyle=make_cell_style_jscode(target), pinned='right')
+            gb.configure_column(f"{target} (True Value)", headerClass="truevalue-header", cellStyle=make_cell_style_jscode2(target), pinned='right')
 
             grid_options = gb.build()
 
@@ -839,7 +874,7 @@ def render_main_pane(steps):
             grid_response = AgGrid(
                 data,
                 gridOptions=grid_options,
-                fit_columns_on_grid_load=True,
+                fit_columns_on_grid_load=False,
                 height=250,
                 enable_enterprise_modules=False,
                 allow_unsafe_jscode=True,
@@ -876,7 +911,7 @@ def render_main_pane(steps):
                     _num_exp_set = len(all_exp_set)              
                 else:
                     _num_exp_set = num_exp_set
-                selected_exp = all_exp_set[-_num_exp_set:]
+                selected_exp = all_exp_set[:_num_exp_set]
 
 
                 row = selected_rows.iloc[[0]]
@@ -913,9 +948,12 @@ def render_main_pane(steps):
                         # predicate = ' or '.join([' and '.join([f'`{c}`=="{row.iloc[0][c]}"' for c in conjunction]) for conjunction in profile])
                         predicate = rule_to_predicate_cg(selected_rule)
 
+                        print(predicate)
+
                         # st.write(f"{explanation}: {predicate}")
 
                         train_df = st.session_state.training_data
+                        print(train_df.dtypes)
                         exp_set = train_df.query(predicate)
                         nrows = len(exp_set)
                         suport = nrows/len(st.session_state.training_data)
