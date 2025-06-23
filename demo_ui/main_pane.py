@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore")
+
 import multiprocessing
 from pathlib import Path
 import re
@@ -13,6 +16,7 @@ from st_aggrid.shared import JsCode
 from copy import deepcopy
 import networkx as nx
 import numpy as np
+import matplotlib.pyplot as plt
 
 from src.proc_data.proc_adult import load_adult
 from src.proc_data.proc_so import load_so
@@ -22,6 +26,8 @@ from src.proc_data.stats import read_to_shared_dict
 from src.proc_data.util import get_base_predictions
 from .dataframe_highlight import apply_highlight
 from .util import custom_css, make_cell_style_jscode, make_cell_style_jscode2
+
+
 
 np.random.seed(42)
 
@@ -792,6 +798,14 @@ def render_main_pane(steps):
                 rules.index.name = "Index"
                 rules = rules.reset_index()
 
+                hist_support = [support for _, support,_ in st.session_state._rules]
+                fig, ax = plt.subplots(figsize=(8, 3), dpi=400)
+                ax.hist(hist_support, bins=20, color='skyblue', edgecolor='black')
+                ax.set_title('Histogram of Rule Support')
+                ax.set_xlabel('Support')
+                ax.set_ylabel('Frequency')
+                st.pyplot(fig)
+
                 gb = GridOptionsBuilder.from_dataframe(rules)
                 gb.configure_selection(selection_mode="single")  # Select entire row on click
                 # gb.configure_pagination(paginationAutoPageSize=True)  # Enable pagination
@@ -838,9 +852,83 @@ def render_main_pane(steps):
             process_metadata()  # Process metadata for the selected dataset and model
             st.success("✅ Retraining finished!")  # Placeholder for future logic
 
+            metadata = st.session_state.metadata
+            rule_dict = st.session_state.rules_dict
+
+            hist_model_similarity = [model_similarity for _, model_similarity, _ in metadata.values()]
+            hist_accuracy = [accuracy for accuracy, _, _ in metadata.values()]
+
+            x, y = list(), list()
+            for golbal_index, label in rule_dict.keys():
+                _, support, _ = rule_dict[(golbal_index, label)]
+                _, model_similarity, _ = metadata[(golbal_index, label)]
+                x.append(support)
+                y.append(1 - model_similarity)
+
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col1:
+                fig, ax = plt.subplots(figsize=(8, 3), dpi=400)
+                ax.hist(hist_model_similarity, bins=20, color='skyblue', edgecolor='black')
+                ax.set_title('Histogram of Model Similarity')
+                ax.set_xlabel('Model Similarity')
+                ax.set_ylabel('Frequency')
+                st.pyplot(fig)
+            with col2:
+                fig, ax = plt.subplots(figsize=(8, 3), dpi=400)
+                ax.hist(hist_accuracy, bins=20, color='skyblue', edgecolor='black')
+                ax.set_title('Histogram of Accuracy')
+                ax.set_xlabel('Accuracy')
+                ax.set_ylabel('Frequency')
+                st.pyplot(fig)
+            with col3:
+                fig, ax = plt.subplots(figsize=(8, 3), dpi=400)
+                ax.scatter(x, y, color='skyblue', edgecolor='black')
+                ax.set_title('Fliprate vs Support')
+                ax.set_xlabel('Support')
+                ax.set_ylabel('Fliprate')
+                st.pyplot(fig)
+
+
     # Main Content for Step 6
     elif st.session_state.step == 6:
         # st.subheader("⚙️ Running the analysis... Please wait.")
+        
+        metadata = st.session_state.metadata
+        rule_dict = st.session_state.rules_dict
+
+        hist_model_similarity = [model_similarity for _, model_similarity, _ in metadata.values()]
+        hist_accuracy = [accuracy for accuracy, _, _ in metadata.values()]
+
+        x, y = list(), list()
+        for golbal_index, label in rule_dict.keys():
+            _, support, _ = rule_dict[(golbal_index, label)]
+            _, model_similarity, _ = metadata[(golbal_index, label)]
+            x.append(support)
+            y.append(1 - model_similarity)
+
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            fig, ax = plt.subplots(figsize=(8, 3), dpi=400)
+            ax.hist(hist_model_similarity, bins=20, color='skyblue', edgecolor='black')
+            ax.set_title('Histogram of Model Similarity')
+            ax.set_xlabel('Model Similarity')
+            ax.set_ylabel('Frequency')
+            st.pyplot(fig)
+        with col2:
+            fig, ax = plt.subplots(figsize=(8, 3), dpi=400)
+            ax.hist(hist_accuracy, bins=20, color='skyblue', edgecolor='black')
+            ax.set_title('Histogram of Accuracy')
+            ax.set_xlabel('Accuracy')
+            ax.set_ylabel('Frequency')
+            st.pyplot(fig)
+        with col3:
+            fig, ax = plt.subplots(figsize=(8, 3), dpi=400)
+            ax.scatter(x, y, color='skyblue', edgecolor='black')
+            ax.set_title('Fliprate vs Support')
+            ax.set_xlabel('Support')
+            ax.set_ylabel('Fliprate')
+            st.pyplot(fig)
+
         st.write("⚙️ **Select a Test row ➡ Select Number of Explanation Sets ➡ Press Generate Explanation Sets ➡ Select Explanation**")
 
         if 'classification_result' in st.session_state:
@@ -940,20 +1028,16 @@ def render_main_pane(steps):
                         delta_ATE = selected_exp[selected_i][2]
                         accuracy = selected_exp[selected_i][3]
                         model_similarity = selected_exp[selected_i][4]
-
-                        print(selected_i, selected_rule, delta_ATE, accuracy, model_similarity)
                             
 
                         # row = st.session_state['selected_row']
                         # predicate = ' or '.join([' and '.join([f'`{c}`=="{row.iloc[0][c]}"' for c in conjunction]) for conjunction in profile])
                         predicate = rule_to_predicate_cg(selected_rule)
 
-                        print(predicate)
 
                         # st.write(f"{explanation}: {predicate}")
 
                         train_df = st.session_state.training_data
-                        print(train_df.dtypes)
                         exp_set = train_df.query(predicate)
                         nrows = len(exp_set)
                         suport = nrows/len(st.session_state.training_data)
