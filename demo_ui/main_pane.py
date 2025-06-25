@@ -143,6 +143,7 @@ def load_test_data():
             le_dict = pickle.load(f)
 
         test_set = adult.loc[test_indices_no_duplicate]
+        st.session_state["y_true"] = test_set[target]
         for col in test_set.columns:
             test_set[col] = le_dict[col].inverse_transform(test_set[col])
         
@@ -158,6 +159,7 @@ def load_test_data():
             multi_val_col_metadata = pickle.load(f)
 
         test_set = so.loc[test_indices_no_duplicate]
+        st.session_state["y_true"] = test_set[target]
         for col in le_dict.keys():
             test_set[col] = le_dict[col].inverse_transform(test_set[col])
 
@@ -175,6 +177,7 @@ def load_test_data():
     elif selected_dataset == "Compas":
         compas, _, target, _, test_indices_no_duplicate = load_compas()
         compas, _ = inverse_preprocess_compas(compas)
+        st.session_state["y_true"] = compas[target].loc[test_indices_no_duplicate]
         compas[target] = compas[target].apply(lambda x: 'True' if x == 1 else 'False')
 
         test_set = compas.loc[test_indices_no_duplicate]
@@ -214,6 +217,8 @@ def run_classification():
     
     y_pred = get_base_predictions(dataset_name=_dataset_name, model_name=_model_name)
     # y_pred = st.session_state.le_dict[st.session_state.target].inverse_transform(y_pred)
+
+    st.session_state["base_y_pred"] = y_pred
 
     classification_df = st.session_state.test_data.copy()
     prediction_col = f"{target} (Prediction)"
@@ -554,7 +559,11 @@ def render_main_pane(steps):
 
 
     if st.session_state.step == 1:
-        st.write("📂 Select a Dataset and Load the Training and Test Data.")
+        st.write("Welcome to the CausalExplain demo! This application allows you to explore causal explanations for black-box models using various datasets and machine learning models.")
+        st.write("📂 First, select a Dataset from the sidebar and Load the Training and Test Data. This will show you a preview of the dataset.")
+        st.write("The target variable is the last column in the dataset and highlighted in red, which is used for classification.")
+        st.write("After loading the data, you can proceed to the next step to choose a machine learning model and train it for classification.")
+        
 
         if st.button("📥 Load Training Data"):
             # load_dummy_csv("training_data")
@@ -649,7 +658,9 @@ def render_main_pane(steps):
                 )
 
     elif st.session_state.step == 2:
-        st.write("⚙️ Choose a machine learning model and run classification.")
+        st.write("⚙️ Next, choose a machine learning model from the sidebar, train the model and run classification. This will show you the classification results.")
+        st.write("The classification results will be displayed in a table, where predictions and true values for the target variable are highlighted in red and green. The misclassified prediction will be highlighted in solid.")
+        st.write("You can then proceed to the next step to load a causal graph and generate Feature Profiles.")
 
         if st.button("🚀 Train Model"):
             with st.spinner(f'Training {st.session_state.selected_model} Model...'):
@@ -705,10 +716,12 @@ def render_main_pane(steps):
 
 
     elif st.session_state.step == 3:
-        st.write("⚙️ **Upload Causal DAG ➡ Set Parameters ➡ Generate Profiles**")
-        st.write("Please provide a causal graph in the form of a directed acyclic graph (DAG) in the .txt format. The graph should be specified as a list of edges, where each edge is represented by a pair of nodes separated by a space. For example, an edge from node A to node B would be represented as 'A B'.") 
-                 
-        st.write("Profiles are sets of of features causally related to the target variable expressed in disjunctive normal form, for example, `((A1 ∧ A2) ∨ (B1 ∧ B2))`. The profiles will be generated based on the provided causal graph and the specified parameters.")
+        st.write("⚙️ **Load Causal DAG ➡ Set Parameters ➡ Generate Profiles**")
+        st.write("Load the causal graph first. The causal graph is a directed acyclic graph (DAG) that represents the causal relationships between features in the dataset. It is used to generate profiles, which are sets of of features causally related to the target variable expressed in disjunctive normal form, for example, `((A1 ∧ A2) ∨ (B1 ∧ B2))`.")
+        st.write("Set the parameters for generating profiles, such as the maximum length of conjunctions and disjunctions. These parameters will be used to generate profiles based on the causal graph.") 
+        st.write("Press the button to generate profiles based on the causal graph and the parameters set. The generated profiles will be displayed in a table below.")
+        st.write("After generating profiles, you can select a profile to show the causal paths it supports. The causal paths are highlighted in the causal graph.")
+        st.write("You can now proceed to the next step to generate filtered rules.")
 
         col1, col2 = st.columns(2)
 
@@ -772,8 +785,13 @@ def render_main_pane(steps):
 
     elif st.session_state.step == 4:
         st.write("⚙️ **Set Parameters ➡ Filter Rules**")
-        st.write("Rules are predicates that describe the subsets in the training data. Explanation sets are also described by rules. Explanation sets with small sizes are interesting because they are easier to explain. Also, removing subsets of the training data affects the predictions for rows other than the intended row. Smaller explanation sets minimize the side effects. Support is the fraction of the explanation set size to the full training data. Max support allows to filter out explanation sets that are too large.") 
-        st.write("The system also uses the change in average treatment effect to identify causally important rules. The Min Δ ATE is a threshold to identify important rules. Rules with Δ ATE below the threshold are filtered out.")
+        st.write("Rules are instantiated from the profiles and feature values in the training data. They describe subsets in the training data.")
+        st.write("Explanation sets are also training data subsets that, when removed, can change the prediction for a test row. Therefore, rules are used to desribe explanation sets.")
+        st.write("However, other test rows are also affected by explanation sets, causing side effects. Smaller explanation sets minimize the side effects.")
+        st.write("Support is the fraction of the explanation set size to the full training data. Max support allows to filter out explanation sets that are too large.") 
+        st.write("The system also uses the Average Treatment Effect (ATE) to identify causally important rules. The Min ATE is a threshold to identify important rules. Rules with ATE below the threshold are filtered out.")
+        st.write("Press the button to generate filtered rules based on the profiles and the parameters set. The generated rules will be displayed in a table below. You can select a profile to show the causal paths it supports. The causal paths are highlighted in the causal graph.")
+        st.write("After generating filtered rules, you can proceed to the next step to review the rules and retrain the model.")
 
         col1, col2 = st.columns(2)
 
@@ -844,6 +862,9 @@ def render_main_pane(steps):
 
     elif st.session_state.step == 5:
         st.subheader("Final Review & Retrain")
+        st.write("This is the final step of the offline preprocessing. It will launch the retraining of the model with the selected dataset and model and set of filtered rules.")
+        st.write("The retraining will take some time, so please be patient. After the retraining is finished, the system will display the histograms of model similarity and accuracy, as well as the scatter plot of fliprate vs support.")
+        st.write("You can then proceed to the next step to generate explanations.")
 
         # Single Button in Step 5
         if st.button("✅ Confirm and Proceed"):
@@ -857,6 +878,10 @@ def render_main_pane(steps):
 
             hist_model_similarity = [model_similarity for _, model_similarity, _ in metadata.values()]
             hist_accuracy = [accuracy for accuracy, _, _ in metadata.values()]
+
+            y_true = st.session_state.y_true
+            base_y_pred = st.session_state.base_y_pred
+            base_accuracy = (y_true == base_y_pred).mean()
 
             x, y = list(), list()
             for golbal_index, label in rule_dict.keys():
@@ -876,9 +901,11 @@ def render_main_pane(steps):
             with col2:
                 fig, ax = plt.subplots(figsize=(8, 3), dpi=400)
                 ax.hist(hist_accuracy, bins=20, color='skyblue', edgecolor='black')
+                ax.axvline(base_accuracy, color='red', linestyle='dashed', linewidth=1, label='Base Accuracy')
                 ax.set_title('Histogram of Accuracy')
                 ax.set_xlabel('Accuracy')
                 ax.set_ylabel('Frequency')
+                ax.legend()
                 st.pyplot(fig)
             with col3:
                 fig, ax = plt.subplots(figsize=(8, 3), dpi=400)
@@ -899,6 +926,10 @@ def render_main_pane(steps):
         hist_model_similarity = [model_similarity for _, model_similarity, _ in metadata.values()]
         hist_accuracy = [accuracy for accuracy, _, _ in metadata.values()]
 
+        y_true = st.session_state.y_true
+        base_y_pred = st.session_state.base_y_pred
+        base_accuracy = (y_true == base_y_pred).mean()
+
         x, y = list(), list()
         for golbal_index, label in rule_dict.keys():
             _, support, _ = rule_dict[(golbal_index, label)]
@@ -917,9 +948,11 @@ def render_main_pane(steps):
         with col2:
             fig, ax = plt.subplots(figsize=(8, 3), dpi=400)
             ax.hist(hist_accuracy, bins=20, color='skyblue', edgecolor='black')
+            ax.axvline(base_accuracy, color='red', linestyle='dashed', linewidth=1, label='Base Accuracy')
             ax.set_title('Histogram of Accuracy')
             ax.set_xlabel('Accuracy')
             ax.set_ylabel('Frequency')
+            ax.legend()
             st.pyplot(fig)
         with col3:
             fig, ax = plt.subplots(figsize=(8, 3), dpi=400)
@@ -930,6 +963,9 @@ def render_main_pane(steps):
             st.pyplot(fig)
 
         st.write("⚙️ **Select a Test row ➡ Select Number of Explanation Sets ➡ Press Generate Explanation Sets ➡ Select Explanation**")
+        st.write("Select a test row from the classification results table and the number of Explanation Sets to generate from the sidebar and generate Explanation Sets.")
+        st.write("The Explanation Sets are displayed as Expalantion Rules. Select an Explanation Rule to show the Explanation Set and the Causal Paths it supports. The Causal Paths are highlighted in the causal graph.")
+        st.write("The Support, Model Similarity, Accuracy, and Average Treatment Effect (ATE) are also displayed for the Explanation Rule.")
 
         if 'classification_result' in st.session_state:
             data = st.session_state.classification_result
