@@ -33,25 +33,25 @@ def initialize_session_variables():
         st.session_state.profiles = pd.DataFrame(columns=["Profiles"])
     
     if "rules" not in st.session_state:
-        st.session_state.rules = pd.DataFrame(columns=["Rules", "Δ ATE"])
+        st.session_state.rules = pd.DataFrame(columns=["Rules", "ATE"])
     
     if "selected_profile" not in st.session_state:
         st.session_state.selected_profile = None
     
     if "conj_max_len" not in st.session_state:
-        st.session_state.conj_max_len = 3
+        st.session_state.conj_max_len = 4
     
     if "disj_max_len" not in st.session_state:
         st.session_state.disj_max_len = 2
     
     if "num_exp_set" not in st.session_state:
-        st.session_state.num_exp_set = 2
+        st.session_state.num_exp_set = 3
     
     if "support_thrs" not in st.session_state:
-        st.session_state.support_thrs = 0.2
+        st.session_state.support_thrs = 0.3
     
     if "delta_ATE" not in st.session_state:
-        st.session_state.delta_ATE = 4.0
+        st.session_state.delta_ATE = 0.05
     
     if "table_data" not in st.session_state:
         st.session_state.table_data = pd.DataFrame(columns=["Feature", "Value"])  # Initialize as empty DataFrame
